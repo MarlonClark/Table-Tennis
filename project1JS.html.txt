@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Pong</title>
+
+  <!-- Basic styling, centering the canvas -->
+  <style>
+    body {
+      background-color: #ddd;
+      text-align: center;
+    }
+
+    #container {
+      margin: auto;
+      width: 700px;
+    }
+
+
+
+    h1 {
+      font-size: 2.5em;
+    }
+
+    h1,
+    h4,
+    span {
+      font-family: 'Courier New', Courier, monospace;
+    }
+
+    #topbar {
+      display: flex;
+      margin-bottom: 5px;
+    }
+
+    #skill,
+    #btn {
+      flex: 1;
+      align-self: center;
+    }
+
+    #hiscore {
+      flex: 2;
+      align-self: center;
+    }
+
+    button {
+      margin-right: 10px;
+      padding: 5px 10px;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 15px;
+      box-shadow: 0px 3px 5px #222;
+      border-radius: 15px;
+      outline: none;
+    }
+
+    button:active {
+      box-shadow: 0px 0.5px 0.5px #222;
+    }
+
+    canvas {
+      display: block;
+      /* position: absolute; */
+      margin: auto;
+      /* top: 0;
+      bottom: 0;
+      left: 0;
+      right: 0; */
+      cursor: none;
+      box-shadow: 0px 3px 6px #222;
+      margin-bottom: 5px;
+    }
+
+    #score {
+      display: flex;
+      justify-content: space-between;
+      width: 700px;
+      text-align: center;
+      margin: auto;
+      font-size: 2.5em;
+      font-weight: bold;
+      text-shadow: 0px 3px 5px #222;
+    }
+
+    #ai,
+    #player {
+      flex: 1;
+    }
+
+    #mid {
+      flex: 2;
+    }
+
+    @keyframes bounce {
+      from {
+        font-size: 1.5em;
+        color: rgb(6, 255, 6);
+        text-shadow: 0px 15px 12px #222;
+      }
+
+      to {
+        font-size: 1em;
+      }
+    }
+
+    .point {
+      animation-name: bounce;
+      animation-duration: 0.5s;
+    }
+
+    .wow {
+      font-weight: bold;
+      color: rgb(6, 255, 6);
+      text-shadow: 0px 0px 2px #222;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="container">
+    <h1>PONG</h1>
+
+    <div id="topbar">
+      <span id="skill">Skill: 0</span>
+      <span id="hiscore">High Score: 0</span>
+      <span id="btn">
+        <button onclick="reset()">RESTART</button>
+      </span>
+    </div>
+    <canvas></canvas>
+    <span id="tip">Use mouse to control left paddle.</span>
+    <div id="score">
+      <span id="player" onchange="point()">0</span>
+      <span id="mid">SCORE</span>
+      <span id="ai" onchange="point()">0</span>
+    </div>
+
+  </div>
+  <script>
+    var
+      /**
+       * Constants
+       */
+      WIDTH = 700,
+      HEIGHT = 450,
+      pi = Math.PI,
+      // UpArrow = 38,
+      // DownArrow = 40,
+
+      // Adding mouse controls <--
+      mouse = undefined,
+      /**
+       * Game elements
+       */
+      canvas,
+      ctx,
+      // keystate,
+      /**
+       * The player paddle
+       * 
+       * @type {Object}
+       */
+      player = {
+        x: null,
+        y: null,
+        width: 20,
+        height: 100,
+        score: 0,
+        skill: 0,
+        /**
+         * Update the position depending on pressed keys
+         */
+        update: function () {
+          this.y = mouse - 134.6 - (this.height / 2);
+          // if (keystate[UpArrow]) this.y -= 10;
+          // if (keystate[DownArrow]) this.y += 10;
+          // keep the paddle inside of the canvas
+          // this.y = Math.max(Math.min(this.y, HEIGHT - this.height), 0);
+        },
+        /**
+         * Draw the player paddle to the canvas
+         */
+        draw: function () {
+          ctx.fillRect(this.x, this.y, this.width, this.height);
+        }
+      },
+      /**
+       * The ai paddle
+       * 
+       * @type {Object}
+       */
+      ai = {
+        x: null,
+        y: null,
+        width: 20,
+        height: 100,
+        score: 0,
+        /**
+         * Update the position depending on the ball position
+         */
+        update: function () {
+          // calculate ideal position
+          var desty = ball.y - (this.height - (ball.side / 2)) * 0.5;
+          // ease the movement towards the ideal position
+          this.y += (desty - this.y) * 0.04;
+          // keep the paddle inside of the canvas
+          // this.y = Math.max(Math.min(this.y, HEIGHT - this.height), 0);
+        },
+        /**
+         * Draw the ai paddle to the canvas
+         */
+        draw: function () {
+          ctx.fillRect(this.x, this.y, this.width, this.height);
+        }
+      },
+      /**	
+       * The ball object
+       * 
+       * @type {Object}
+       */
+      ball = {
+        x: null,
+        y: null,
+        vel: null,
+        side: 10,
+        speed: 5,
+        /**
+         * Serves the ball towards the specified side
+         * 
+         * @param  {number} side 1 right
+         *                       -1 left
+         */
+        serve: function (side) {
+          // set the x and y position
+          var r = Math.random();
+          this.x = side === 1 ? player.x + player.width : ai.x - this.side;
+          this.y = (HEIGHT - this.side) * r;
+          // calculate out-angle, higher/lower on the y-axis =>
+          // steeper angle
+          var phi = 0.1 * pi * (1 - 2 * r);
+          // set velocity direction and magnitude
+          this.vel = {
+            x: side * this.speed * Math.cos(phi),
+            y: this.speed * Math.sin(phi)
+          }
+        },
+        /**
+         * Update the ball position and keep it within the canvas
+         */
+        update: function () {
+          // update position with current velocity
+          this.x += this.vel.x;
+          this.y += this.vel.y;
+
+          // check if out of the canvas in the y direction
+          // if (0 >= this.y || this.y + this.side > HEIGHT) {
+          //   console.log(this.y);
+          //   // calculate and add the right offset, i.e. how far
+          //   // inside of the canvas the ball is
+          //   var offset = this.vel.y < 0 ? 0 - this.y : HEIGHT - (this.y + this.side);
+          //   this.y += 2 * offset;
+          //   // mirror the y velocity
+          //   this.vel.y *= -1;
+          // }
+          if (this.y + this.side >= HEIGHT || this.y - this.side <= 0) {
+            this.vel.y = -this.vel.y;
+          }
+
+          // helper function to check intesectiont between two
+          // axis aligned bounding boxex (AABB)
+          var AABBIntersect = function (ax, ay, aw, ah, bx, by, bw, bh) {
+            return ax < bx + bw && ay < by + bh && bx < ax + aw && by < ay + ah;
+          };
+          // check againts target paddle to check collision in x
+          // direction
+          var pdle = this.vel.x < 0 ? player : ai;
+          if (AABBIntersect(pdle.x, pdle.y, pdle.width, pdle.height,
+              this.x - this.side, this.y, this.side, this.side)) {
+            // set the x position and calculate reflection angle
+            this.x = pdle === player ? player.x + player.width + this.side : ai.x - this.side;
+            var n = (this.y + this.side - pdle.y) / (pdle.height + this.side);
+            var phi = 0.25 * pi * (2 * n - 1); // pi/4 = 45
+            // calculate smash value and update velocity
+            var smash = Math.abs(phi) > 0.2 * pi ? 1.5 : 1;
+            this.vel.x = smash * (pdle === player ? 1 : -1) * this.speed * Math.cos(phi);
+            this.vel.y = smash * this.speed * Math.sin(phi);
+          }
+          // Scoring
+          const aiSide = document.getElementById('ai');
+          const plSide = document.getElementById('player');
+          if (this.x + this.side < 0) {
+            ai.score++;
+            aiSide.innerHTML = ai.score;
+            point('ai');
+          } else if (this.x > WIDTH) {
+            player.score++;
+            plSide.innerHTML = player.score;
+            point('player');
+          }
+          // reset the ball when ball outside of the canvas in the
+          // x direction
+          if (0 > this.x + this.side || this.x > WIDTH) {
+            this.serve(pdle === player ? 1 : -1);
+          }
+        },
+        /**
+         * Draw the ball to the canvas
+         */
+        draw: function () {
+          // ctx.fillRect(this.x, this.y, this.side, this.side);
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, this.side, 0, pi * 2, false);
+          ctx.fillStyle = 'white';
+          ctx.fill();
+        }
+      };
+
+    // Track mouse y movement
+    window.addEventListener('mousemove',
+      function () {
+        mouse = event.y;
+      })
+
+    /**
+     * Starts the game
+     */
+    function main() {
+      // create, initiate and append game canvas
+      canvas = document.querySelector("canvas");
+      canvas.width = WIDTH;
+      canvas.height = HEIGHT;
+      ctx = canvas.getContext("2d");
+      // document.body.appendChild(canvas);
+      // keystate = {};
+      // keep track of keyboard presses
+      // document.addEventListener("keydown", function (evt) {
+      //   keystate[evt.keyCode] = true;
+      // });
+      // document.addEventListener("keyup", function (evt) {
+      //   delete keystate[evt.keyCode];
+      // });
+      init(); // initiate game objects
+      // game loop function
+      var loop = function () {
+        update();
+        draw();
+        window.requestAnimationFrame(loop, canvas);
+      };
+      window.requestAnimationFrame(loop, canvas);
+    }
+    /**
+     * Initatite game objects and set start positions
+     */
+    function init() {
+      player.x = player.width;
+      player.y = (HEIGHT - player.height) / 2;
+      ai.x = WIDTH - (player.width + ai.width);
+      ai.y = (HEIGHT - ai.height) / 2;
+      ball.serve(1);
+    }
+    /**
+     * Update all game objects
+     */
+    function update() {
+      ball.update();
+      player.update();
+      ai.update();
+    }
+    /**
+     * Clear canvas and draw all game objects and net
+     */
+    function draw() {
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+      ctx.save();
+      ctx.fillStyle = "#fff";
+      ball.draw();
+      player.draw();
+      ai.draw();
+      // draw the net
+      var w = 3;
+      var x = (WIDTH - w) * 0.5;
+      var y = 0;
+      var step = HEIGHT / 20; // how many net segments
+      while (y < HEIGHT) {
+        ctx.fillRect(x, y + step * 0.25, w, step * 0.5);
+        y += step;
+      }
+      ctx.fillRect(0, (HEIGHT / 2) - 1, WIDTH, 2);
+      ctx.restore();
+    }
+
+    // Store high score
+    let scoreMax = localStorage.getItem('storedScore') || 0;
+    let scoreArray = [];
+    scoreArray.push(Number(scoreMax));
+    let highSkill = document.getElementById('hiscore');
+    highSkill.innerHTML = `Highest Skill: ${scoreMax}`;
+
+    // Score system
+    function point(team) {
+      // scoring effect
+      let effect = document.getElementById(team);
+      effect.classList.add('point');
+      // Speed-up ball after point scored
+      if (team == 'player') {
+        ball.speed += 0.1;
+      } else {
+        ball.speed += 0.05;
+      }
+      // Update player skill points
+      player.skill = player.score - ai.score;
+      scoreArray.push(player.skill);
+      document.getElementById('skill').innerHTML = `Skill: ${player.skill}`;
+
+      // Record skill points
+      localStorage.setItem('storedScore', Math.max(...scoreArray));
+
+      // Display high score
+      highSkill.innerHTML = `Highest Skill: ${localStorage.getItem('storedScore')}`;
+      if (player.skill == Math.max(...scoreArray)) {
+        highSkill.classList.add('wow');
+        setTimeout(function () {
+          highSkill.classList.remove('wow');
+        }, 500);
+      }
+
+      // Reset scoring effect
+      setTimeout(function () {
+        effect.classList.remove('point');
+      }, 550);
+    }
+
+    // localStorage.clear();
+
+    // Reset score
+    function reset() {
+      location.reload();
+    }
+
+    // start and run the game
+    main();
+  </script>
+</body>
+
+</html>
